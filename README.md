@@ -30,8 +30,8 @@ A multiplayer online escape room game where players work together to solve puzzl
 ## Installation
 
 ```bash
-git clone https://github.com/NatiMalka/escape-room.git
-cd escape-room
+git clone https://github.com/NatiMalka/tomax-escap-room.git
+cd tomax-escap-room
 npm install
 npm run dev
 ```
