@@ -1,6 +1,6 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, onValue, update, remove, get } from "firebase/database";
+import { getDatabase, ref, set, onValue, update, remove, get, push, serverTimestamp } from "firebase/database";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -254,7 +254,8 @@ const startGame = async (roomCode) => {
       gameState: "playing",
       startTime: startTime,
       videoStartTime: startTime + 5000, // 5 seconds after game state changes (for countdown)
-      videoEnded: false
+      videoEnded: false,
+      gamePhase: 0 // Initialize game phase to video intro
     });
   } catch (error) {
     console.error("[FIREBASE] Error starting game:", error);
@@ -429,6 +430,109 @@ const markVideoEnded = async (roomCode) => {
   }
 };
 
+// Update game phase
+const updateGamePhase = async (roomCode, phase) => {
+  try {
+    console.log(`[FIREBASE] Updating game phase for room ${roomCode} to phase ${phase}`);
+    await update(ref(database, `lobbies/${roomCode}`), {
+      gamePhase: phase
+    });
+  } catch (error) {
+    console.error("[FIREBASE] Error updating game phase:", error);
+    throw error;
+  }
+};
+
+// Track leader's keystrokes in the login form
+const updateLeaderKeystrokes = async (roomCode, fieldName, value) => {
+  try {
+    console.log(`[FIREBASE] Updating leader keystrokes for ${fieldName} in room ${roomCode}`);
+    await update(ref(database, `lobbies/${roomCode}/leaderInput`), {
+      [fieldName]: value,
+      lastUpdated: Date.now()
+    });
+  } catch (error) {
+    console.error("[FIREBASE] Error updating leader keystrokes:", error);
+    throw error;
+  }
+};
+
+// Clear leader's keystroke data when form is submitted
+const clearLeaderKeystrokes = async (roomCode) => {
+  try {
+    console.log(`[FIREBASE] Clearing leader keystrokes in room ${roomCode}`);
+    await update(ref(database, `lobbies/${roomCode}/leaderInput`), {
+      username: '',
+      password: '',
+      lastUpdated: Date.now()
+    });
+  } catch (error) {
+    console.error("[FIREBASE] Error clearing leader keystrokes:", error);
+    throw error;
+  }
+};
+
+// Record a failed login attempt to trigger hacker chat for all players
+const recordFailedLogin = async (roomCode) => {
+  try {
+    console.log(`[FIREBASE] Recording failed login attempt in room ${roomCode}`);
+    
+    // Set a flag indicating there was a failed login attempt
+    await update(ref(database, `lobbies/${roomCode}`), {
+      loginFailed: true
+    });
+    
+    // Create the initial hacker chat message
+    const chatRef = ref(database, `lobbies/${roomCode}/hackerChat`);
+    await push(chatRef, {
+      sender: 'hacker',
+      text: `Access denied.
+Your precious system… is no longer yours.
+But I'm not without mercy.
+I left you something — a gift, if you will.
+Look for the file: welcome_admin.txt.
+Decode it…
+and maybe, just maybe… you'll earn your way back in.`,
+      timestamp: serverTimestamp(),
+      isFirstMessage: true // Flag to indicate this is the first hacker message
+    });
+    
+    console.log(`[FIREBASE] Hacker chat message created`);
+    
+    // Set a timeout to send the file contents after 25 seconds (changed from 15 seconds)
+    setTimeout(async () => {
+      try {
+        await push(chatRef, {
+          sender: 'hacker',
+          text: `*** SYSTEM LOG ***
+Unauthorized Access Detected  
+User: blocked_user  
+Time: 03:14 AM  
+IP: 127.0.0.1  
+TraceID: RECON-314159
+
+Message:  
+"He's hidden the key where configs hide.  
+Not everything is visible in plain sight...  
+Sometimes, to see the truth, you need to Inspect."
+
+#404NotFound #ButLookCloser`,
+          isFile: true,
+          fileName: 'welcome_admin.txt',
+          timestamp: serverTimestamp()
+        });
+        console.log(`[FIREBASE] Hacker sent file: welcome_admin.txt`);
+      } catch (error) {
+        console.error("[FIREBASE] Error sending file content:", error);
+      }
+    }, 25000); // Changed from 15000 (15 seconds) to 25000 (25 seconds)
+    
+  } catch (error) {
+    console.error("[FIREBASE] Error recording failed login:", error);
+    throw error;
+  }
+};
+
 export {
   database,
   createLobby,
@@ -438,5 +542,9 @@ export {
   getLobbyData,
   voteForLeader,
   clearLeaderVotes,
-  markVideoEnded
+  markVideoEnded,
+  updateGamePhase,
+  updateLeaderKeystrokes,
+  clearLeaderKeystrokes,
+  recordFailedLogin
 }; 

@@ -4,8 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Button from '../components/ButtonSimple';
 import GlitchText from '../components/GlitchText';
 import PlayerList from '../components/PlayerList';
-import { getLobbyData, leaveLobby, startGame, voteForLeader, clearLeaderVotes, markVideoEnded, database } from '../firebase';
-import { ref, set, get, update } from 'firebase/database';
+import GamePhases from '../components/GamePhases';
+import HackerChat from '../components/HackerChat';
+import { getLobbyData, leaveLobby, startGame, voteForLeader, clearLeaderVotes, markVideoEnded, updateGamePhase, database } from '../firebase';
+import { ref, set, get, update, onValue } from 'firebase/database';
 
 // Mock data for demonstration - initially empty
 const mockPlayers = [];
@@ -46,6 +48,15 @@ const Lobby = () => {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [videoEnded, setVideoEnded] = useState(false);
   const videoRef = useRef(null);
+  const audioRef = useRef(null);
+  
+  // Game phase tracking - now synced with Firebase
+  const [gamePhase, setGamePhase] = useState(0); // 0: Lobby, 1: First puzzle (login), etc.
+  
+  // Track if hacker chat should be shown
+  const [showHackerChat, setShowHackerChat] = useState(false);
+  const [hackerFirstMessagePlayed, setHackerFirstMessagePlayed] = useState(false);
+  const hackerFirstClueAudioRef = useRef(null);
   
   // One-time initialization
   useEffect(() => {
@@ -188,11 +199,29 @@ const Lobby = () => {
           }
         }
         
+        // Sync game phase from Firebase
+        if (data.gamePhase !== undefined) {
+          console.log(`[LOBBY] Syncing game phase from Firebase: ${data.gamePhase}`);
+          setGamePhase(data.gamePhase);
+        }
+        
         // Handle video ending synchronization
         if (data.videoEnded && !videoEnded) {
           console.log("[LOBBY] Video marked as ended by another player, synchronizing");
           setIsVideoPlaying(false);
           setVideoEnded(true);
+        }
+        
+        // Check if hacker chat should be shown
+        if (data.hackerChat && Object.keys(data.hackerChat).length > 0) {
+          console.log("[LOBBY] Hacker chat messages detected, showing chat");
+          setShowHackerChat(true);
+        }
+        
+        // Check if a failed login was recorded
+        if (data.loginFailed === true) {
+          console.log("[LOBBY] Failed login detected, showing hacker chat");
+          setShowHackerChat(true);
         }
       }
       
@@ -319,21 +348,36 @@ const Lobby = () => {
   
   // Handle video end
   const handleVideoEnded = async () => {
-    console.log("[LOBBY] Video playback ended");
+    console.log("[LOBBY] Video ended");
     setVideoEnded(true);
     setIsVideoPlaying(false);
     
-    try {
-      // Mark the video as ended for all players
-      await markVideoEnded(roomCode);
-      console.log("[LOBBY] Marked video as ended for all players");
-    } catch (err) {
-      console.error("[LOBBY] Error marking video as ended:", err);
-    }
+    // Don't pause the background music when video ends
+    // as it should continue playing throughout the game
     
-    // This is where we would navigate to the game screen
-    // For now, we'll just log that the video has ended
-    console.log("[LOBBY] Ready to transition to game");
+    try {
+      // Mark video as ended for all players to see
+      await markVideoEnded(roomCode);
+      
+      // Update game phase to 1 (login puzzle) for all players
+      await updateGamePhase(roomCode, 1);
+      console.log("[LOBBY] Updated game phase to 1 for all players");
+    } catch (error) {
+      console.error("[LOBBY] Error updating game state:", error);
+    }
+  };
+
+  // Handle completion of a game phase
+  const handlePhaseComplete = async (nextPhase) => {
+    console.log(`[LOBBY] Phase ${nextPhase - 1} completed, moving to phase ${nextPhase}`);
+    
+    try {
+      // Update game phase in Firebase for all players to stay in sync
+      await updateGamePhase(roomCode, nextPhase);
+      console.log(`[LOBBY] Updated game phase to ${nextPhase} for all players`);
+    } catch (error) {
+      console.error(`[LOBBY] Error updating game phase to ${nextPhase}:`, error);
+    }
   };
 
   // Toggle player readiness
@@ -447,6 +491,75 @@ const Lobby = () => {
       </div>
     );
   };
+
+  // Start or stop background music based on video playing state
+  useEffect(() => {
+    if (isVideoPlaying && audioRef.current) {
+      audioRef.current.play().catch(err => {
+        console.error('[LOBBY] Error playing background music:', err);
+      });
+    } else if (!isVideoPlaying && audioRef.current && !audioRef.current.paused) {
+      // If video ended but we want music to continue playing throughout the game,
+      // don't pause the audio here
+      // audioRef.current.pause();
+    }
+  }, [isVideoPlaying]);
+
+  // Watch for hacker chat messages to play audio when first message appears
+  useEffect(() => {
+    if (!roomCode || hackerFirstMessagePlayed) return;
+    
+    // Set up a one-time check for the first hacker message
+    const checkForFirstHackerMessage = async () => {
+      try {
+        const chatRef = ref(database, `lobbies/${roomCode}/hackerChat`);
+        const snapshot = await get(chatRef);
+        const data = snapshot.val();
+        
+        if (data) {
+          const messages = Object.values(data);
+          const firstMessage = messages.find(msg => msg.isFirstMessage);
+          
+          if (firstMessage && !hackerFirstMessagePlayed) {
+            console.log("[LOBBY] Found first hacker message, playing audio");
+            // Play the hacker first clue audio
+            hackerFirstClueAudioRef.current?.play().catch(e => 
+              console.error("[LOBBY] Failed to play hacker audio:", e)
+            );
+            setHackerFirstMessagePlayed(true);
+          }
+        }
+      } catch (error) {
+        console.error("[LOBBY] Error checking for first hacker message:", error);
+      }
+    };
+    
+    // When hacker chat appears, check for first message
+    if (showHackerChat) {
+      checkForFirstHackerMessage();
+      
+      // Also set up a listener for future messages
+      const chatRef = ref(database, `lobbies/${roomCode}/hackerChat`);
+      const unsubscribe = onValue(chatRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data && !hackerFirstMessagePlayed) {
+          const messages = Object.values(data);
+          const firstMessage = messages.find(msg => msg.isFirstMessage);
+          
+          if (firstMessage) {
+            console.log("[LOBBY] New first hacker message detected, playing audio");
+            hackerFirstClueAudioRef.current?.play().catch(e => 
+              console.error("[LOBBY] Failed to play hacker audio:", e)
+            );
+            setHackerFirstMessagePlayed(true);
+            unsubscribe(); // Remove listener after playing
+          }
+        }
+      });
+      
+      return () => unsubscribe();
+    }
+  }, [roomCode, showHackerChat, hackerFirstMessagePlayed]);
 
   if (loading) {
     return (
@@ -1021,6 +1134,21 @@ const Lobby = () => {
         )}
       </AnimatePresence>
 
+      {/* Background music that plays throughout the game */}
+      <audio 
+        ref={audioRef}
+        src="/dark-mysterious-true-crime-music-loopable-235870.mp3"
+        loop
+        preload="auto"
+      />
+      
+      {/* Hacker first clue audio */}
+      <audio 
+        ref={hackerFirstClueAudioRef}
+        src="/hacker-clue/hacker first clue.wav"
+        preload="auto"
+      />
+
       {/* Hacker Video Overlay */}
       <AnimatePresence>
         {isVideoPlaying && (
@@ -1055,6 +1183,17 @@ const Lobby = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Game Phases - Show when video has ended */}
+      {videoEnded && gamePhase > 0 && (
+        <GamePhases 
+          currentPhase={gamePhase}
+          onPhaseComplete={handlePhaseComplete}
+        />
+      )}
+      
+      {/* Hacker Chat - Appears only after failed login attempt */}
+      {showHackerChat && <HackerChat />}
     </div>
   );
 };
