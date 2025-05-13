@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useLocation } from 'react-router-dom';
 import { database, updateLeaderKeystrokes, clearLeaderKeystrokes, recordFailedLogin } from '../firebase';
-import { ref, get, onValue, push, serverTimestamp } from 'firebase/database';
+import { ref, get, onValue, update, push, serverTimestamp } from 'firebase/database';
 import useHackerChat from './useHackerChat';
 
 const UbuntuLogin = ({ onLoginSuccess }) => {
@@ -18,7 +18,6 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loginAttempts, setLoginAttempts] = useState(0);
-  const [showHint, setShowHint] = useState(false);
   const [isLeader, setIsLeader] = useState(false);
   const [leaderName, setLeaderName] = useState('');
   const [syncEnabled, setSyncEnabled] = useState(true);
@@ -26,6 +25,7 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
   
   // Track subscription to avoid memory leaks
   const leaderInputSubscription = useRef(null);
+  const authMessageSubscription = useRef(null);
   
   const [terminalLines, setTerminalLines] = useState([
     { text: 'System booting...', color: 'text-green-400' },
@@ -109,6 +109,75 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
     };
   }, [roomCode, isLeader, syncEnabled]);
 
+  // Add effect for component unmounting to clean up all subscriptions
+  useEffect(() => {
+    return () => {
+      // Cleanup all subscriptions when component unmounts
+      if (leaderInputSubscription.current) {
+        leaderInputSubscription.current();
+        leaderInputSubscription.current = null;
+      }
+      
+      if (authMessageSubscription.current) {
+        authMessageSubscription.current();
+        authMessageSubscription.current = null;
+      }
+    };
+  }, []);
+
+  // Set up real-time sync for authentication messages
+  useEffect(() => {
+    if (!roomCode) return;
+    
+    // Clean up previous subscription if it exists
+    if (authMessageSubscription.current) {
+      authMessageSubscription.current();
+      authMessageSubscription.current = null;
+    }
+    
+    // Subscribe to authentication messages for all users
+    console.log('[UBUNTU LOGIN] Setting up auth message sync');
+    const authMessageRef = ref(database, `lobbies/${roomCode}/authMessage`);
+    
+    authMessageSubscription.current = onValue(authMessageRef, (snapshot) => {
+      const authMessageData = snapshot.val();
+      if (authMessageData) {
+        console.log('[UBUNTU LOGIN] Received auth message data:', authMessageData);
+        
+        // Update local state with auth message data
+        if (authMessageData.error !== undefined) {
+          setError(authMessageData.error || '');
+        }
+        
+        if (authMessageData.loginAttempts !== undefined) {
+          setLoginAttempts(authMessageData.loginAttempts || 0);
+        }
+        
+        // Update terminal lines if provided
+        if (authMessageData.terminalLines) {
+          setTerminalLines(prevLines => {
+            // Filter out any lines that match the message pattern we're adding
+            // to avoid duplicates if the leader has multiple failed attempts
+            const filteredLines = prevLines.filter(line => 
+              !line.text.includes('Authentication failed') && 
+              !line.text.includes('Authentication successful') &&
+              !line.text.includes('attempts remaining before lockout')
+            );
+            return [...filteredLines, ...authMessageData.terminalLines];
+          });
+        }
+      }
+    });
+    
+    return () => {
+      // Cleanup subscription when component unmounts
+      if (authMessageSubscription.current) {
+        authMessageSubscription.current();
+        authMessageSubscription.current = null;
+      }
+    };
+  }, [roomCode]);
+
   // Handle input changes for the leader
   const handleInputChange = async (fieldName, value) => {
     if (fieldName === 'username') {
@@ -127,6 +196,22 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
     }
   };
 
+  // Update authentication messages in Firebase
+  const updateAuthMessage = async (data) => {
+    if (!roomCode) return;
+    
+    try {
+      const authMessageRef = ref(database, `lobbies/${roomCode}/authMessage`);
+      await update(authMessageRef, {
+        ...data,
+        lastUpdated: Date.now()
+      });
+      console.log('[UBUNTU LOGIN] Updated auth message:', data);
+    } catch (error) {
+      console.error('[UBUNTU LOGIN] Error updating auth message:', error);
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     
@@ -137,10 +222,8 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
     }
     
     // Add terminal output for login attempt
-    setTerminalLines(prev => [
-      ...prev,
-      { text: `Authentication attempt: ${username}`, color: 'text-blue-300' }
-    ]);
+    const newTerminalLine = { text: `Authentication attempt: ${username}`, color: 'text-blue-300' };
+    setTerminalLines(prev => [...prev, newTerminalLine]);
     
     // Temporarily disable sync to prevent flicker during animation
     setSyncEnabled(false);
@@ -158,12 +241,19 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
     setTimeout(async () => {
       if (username === correctUsername && password === correctPassword) {
         // Success!
-        setTerminalLines(prev => [
-          ...prev,
+        const successLines = [
           { text: 'Authentication successful', color: 'text-green-400' },
           { text: 'Bypassing security protocols...', color: 'text-green-400' },
           { text: 'Access granted to TOMAX mainframe', color: 'text-green-500' }
-        ]);
+        ];
+        
+        setTerminalLines(prev => [...prev, ...successLines]);
+        
+        // Sync success message with all players
+        await updateAuthMessage({ 
+          error: '',
+          terminalLines: successLines
+        });
         
         // Wait for the terminal messages to be visible, then proceed
         setTimeout(() => {
@@ -171,13 +261,25 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
         }, 2000);
       } else {
         // Failure
-        setLoginAttempts(prev => prev + 1);
-        setError('Authentication failed. Invalid credentials.');
-        setTerminalLines(prev => [
-          ...prev,
+        const newAttempts = loginAttempts + 1;
+        setLoginAttempts(newAttempts);
+        
+        const errorMsg = 'Authentication failed. Invalid credentials.';
+        setError(errorMsg);
+        
+        const failureLines = [
           { text: 'Authentication failed', color: 'text-red-500' },
           { text: `${3 - loginAttempts} attempts remaining before lockout`, color: 'text-yellow-400' }
-        ]);
+        ];
+        
+        setTerminalLines(prev => [...prev, ...failureLines]);
+        
+        // Sync failure message with all players
+        await updateAuthMessage({
+          error: errorMsg,
+          loginAttempts: newAttempts,
+          terminalLines: failureLines
+        });
         
         // Trigger hacker chat on first failed attempt for all players
         if (loginAttempts === 0 && isLeader) {
@@ -187,15 +289,6 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
           } catch (error) {
             console.error('[UBUNTU LOGIN] Error recording failed login:', error);
           }
-        }
-        
-        // Show hint after 3 failed attempts
-        if (loginAttempts >= 2) {
-          setShowHint(true);
-          setTerminalLines(prev => [
-            ...prev,
-            { text: 'HINT: Check the page source and Elements tab in Dev Tools (F12)', color: 'text-blue-400' }
-          ]);
         }
         
         // Re-enable sync after error handling
@@ -226,7 +319,7 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
 
   return (
     <motion.div 
-      className="fixed inset-0 bg-black/80 flex items-center justify-center z-40"
+      className="fixed inset-0 bg-black/90 flex items-center justify-center z-40"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -235,14 +328,63 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
       {/* <!-- SECURITY NOTICE: System administrator username is 'sysadmin' --> */}
       {/* <!-- MAINTENANCE REMINDER: Standard password format F1r3w4ll#2023 still in use --> */}
       
+      {/* Enhanced cybersecurity background animation */}
       <div 
         className="absolute inset-0 overflow-hidden pointer-events-none"
         id="secure-login-container"
       >
-        {/* Grid lines background */}
-        <div className="absolute inset-0 grid grid-cols-[repeat(50,1fr)] grid-rows-[repeat(50,1fr)] opacity-20">
+        {/* Digital rain effect */}
+        <div className="absolute inset-0 opacity-20">
+          {Array.from({ length: 15 }).map((_, i) => (
+            <motion.div
+              key={`rain-${i}`}
+              className="absolute text-green-500/30 text-xs font-mono whitespace-pre"
+              initial={{ 
+                top: `${Math.random() * 100}%`, 
+                left: `${Math.random() * 100}%`,
+                opacity: 0.3
+              }}
+              animate={{
+                opacity: [0.1, 0.3, 0.1],
+                top: ['0%', '100%'],
+              }}
+              transition={{ 
+                duration: 15 + Math.random() * 20,
+                repeat: Infinity,
+                ease: "linear"
+              }}
+            >
+              {Array.from({ length: 10 }).map((_, j) => (
+                <div key={j}>
+                  {`${'0'.repeat(Math.floor(Math.random() * 10))}1${Math.random().toString(36).substring(2, 10)}`}
+                </div>
+              ))}
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Scan lines effect */}
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-500/5 to-transparent opacity-30 pointer-events-none" 
+           style={{ backgroundSize: '100% 8px' }}>
+        </div>
+        
+        {/* Grid lines background - more visible and dynamic */}
+        <div className="absolute inset-0 grid grid-cols-[repeat(50,1fr)] grid-rows-[repeat(50,1fr)] opacity-15">
           {Array.from({ length: 100 }).map((_, i) => (
-            <div key={i} className="border-[0.5px] border-blue-500/10"></div>
+            <motion.div 
+              key={i} 
+              className="border-[0.5px] border-blue-500/10"
+              animate={{
+                borderColor: Math.random() > 0.9 
+                  ? ['rgba(59, 130, 246, 0.1)', 'rgba(239, 68, 68, 0.1)', 'rgba(59, 130, 246, 0.1)'] 
+                  : ['rgba(59, 130, 246, 0.1)', 'rgba(59, 130, 246, 0.1)', 'rgba(59, 130, 246, 0.1)']
+              }}
+              transition={{ 
+                duration: 2 + Math.random() * 3,
+                repeat: Infinity,
+                repeatType: "reverse"
+              }}
+            />
           ))}
         </div>
         
@@ -281,50 +423,88 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
         <span data-pass="F1r3w4ll#2023">Security protocol</span>
       </div>
       
+      {/* Main login container - increased size and improved style */}
       <div 
-        className={`relative max-w-3xl w-full mx-auto rounded-xl overflow-hidden shadow-2xl 
+        className={`relative max-w-5xl w-full mx-auto rounded-xl overflow-hidden shadow-2xl 
           ${glitchEffect ? 'animate-pulse' : ''}`}
         // Hidden data attributes with credentials
         data-system-user={correctUsername} 
         data-security-key={correctPassword}
         data-security-level="maximum"
       >
+        {/* Floating circuit pattern decorations */}
+        <motion.div 
+          className="absolute -top-20 -right-20 w-64 h-64 opacity-30 pointer-events-none"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 120, repeat: Infinity, ease: "linear" }}
+        >
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="40" stroke="#4f46e5" strokeWidth="0.5" fill="none" />
+            <circle cx="50" cy="50" r="30" stroke="#4f46e5" strokeWidth="0.5" fill="none" />
+            <circle cx="50" cy="50" r="20" stroke="#4f46e5" strokeWidth="0.5" fill="none" />
+            <path d="M50,10 L50,90 M10,50 L90,50 M25,25 L75,75 M25,75 L75,25" stroke="#4f46e5" strokeWidth="0.25" />
+          </svg>
+        </motion.div>
+        
+        <motion.div 
+          className="absolute -bottom-20 -left-20 w-64 h-64 opacity-30 pointer-events-none"
+          animate={{ rotate: -360 }}
+          transition={{ duration: 120, repeat: Infinity, ease: "linear" }}
+        >
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="40" stroke="#4f46e5" strokeWidth="0.5" fill="none" />
+            <circle cx="50" cy="50" r="30" stroke="#4f46e5" strokeWidth="0.5" fill="none" />
+            <circle cx="50" cy="50" r="20" stroke="#4f46e5" strokeWidth="0.5" fill="none" />
+            <path d="M50,10 L50,90 M10,50 L90,50 M25,25 L75,75 M25,75 L75,25" stroke="#4f46e5" strokeWidth="0.25" />
+          </svg>
+        </motion.div>
+        
         {/* Team leader indicator */}
         {!isLeader && (
-          <div className="absolute top-0 left-0 right-0 bg-indigo-800 text-white text-center py-1 text-sm z-10">
+          <div className="absolute top-0 left-0 right-0 bg-indigo-800 text-white text-center py-2 text-base z-10 font-medium tracking-wider border-b border-indigo-700/50">
             <span className="font-medium">{leaderName || 'Team Leader'}</span> is typing... (View-only mode)
           </div>
         )}
       
-        {/* Ubuntu-style login header */}
-        <div className="bg-gradient-to-r from-purple-900 to-gray-900 p-4 flex items-center">
-          <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
-          <div className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
-          <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+        {/* Modern header with elevated design */}
+        <div className="bg-gradient-to-r from-indigo-900 via-purple-900 to-gray-900 p-4 flex items-center border-b border-indigo-700/50">
+          <div className="w-3.5 h-3.5 rounded-full bg-red-500 mr-2.5 shadow-lg shadow-red-500/30"></div>
+          <div className="w-3.5 h-3.5 rounded-full bg-yellow-500 mr-2.5 shadow-lg shadow-yellow-500/30"></div>
+          <div className="w-3.5 h-3.5 rounded-full bg-green-500 mr-2.5 shadow-lg shadow-green-500/30"></div>
           <div 
-            className="flex-grow text-center text-white font-medium username-sysadmin" 
+            className="flex-grow text-center text-white font-medium username-sysadmin text-lg tracking-wider" 
             aria-description="Default admin account: sysadmin"
           >
             TOMAX Security Gateway
           </div>
         </div>
         
-        <div className="bg-gray-900 p-6 flex flex-col md:flex-row gap-6">
-          {/* Left column - Terminal output */}
-          <div className="w-full md:w-1/2 bg-black bg-opacity-80 rounded-lg p-4 border border-gray-700">
-            <div className="text-green-500 font-mono text-sm mb-2">$ ./security_override.sh</div>
+        <div className="bg-gray-900 p-6 md:p-10 flex flex-col md:flex-row gap-8">
+          {/* Left column - Terminal output with enhanced style */}
+          <div className="w-full md:w-1/2 bg-black bg-opacity-80 rounded-lg p-5 border border-gray-700 shadow-2xl relative overflow-hidden">
+            {/* Terminal glowing effect */}
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-900/10 to-transparent pointer-events-none"></div>
+            
+            <div className="text-green-500 font-mono text-sm mb-3 flex items-center">
+              <span className="mr-2 text-gray-500">$</span>
+              <span className="text-gray-300">./</span>
+              <span className="text-cyan-400">security_override</span>
+              <span className="text-gray-300">.sh</span>
+            </div>
+            
             <div 
               id="terminal-output"
-              className="h-60 overflow-y-auto font-mono text-xs space-y-1 terminal-scrollbar"
+              className="h-80 overflow-y-auto font-mono text-sm space-y-1.5 terminal-scrollbar"
             >
               {terminalLines.map((line, index) => (
                 <AnimatePresence key={index}>
                   <motion.div
                     initial={{ opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className={`${line.color}`}
+                    className={`${line.color} flex`}
                   >
-                    {index === 0 ? '> ' : '$ '}{line.text}
+                    <span className="text-gray-500 mr-2">{index === 0 ? '>' : '$'}</span>
+                    <span>{line.text}</span>
                   </motion.div>
                 </AnimatePresence>
               ))}
@@ -332,26 +512,27 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: [0, 1, 0] }}
                 transition={{ duration: 1, repeat: Infinity }}
-                className="text-green-400 inline-block"
-              >
-                _
-              </motion.div>
+                className="text-green-400 inline-block h-4 w-2.5 bg-green-500"
+              />
             </div>
             
-            {/* System status with hidden clue in the source element */}
-            <div className="mt-4 pt-4 border-t border-gray-700">
-              <div className="text-blue-400 font-mono text-xs mb-2">System Status:</div>
-              <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+            {/* System status with hidden clue in the source element - improved styling */}
+            <div className="mt-5 pt-4 border-t border-gray-700/50">
+              <div className="text-blue-400 font-mono text-sm mb-3 flex items-center">
+                <span className="mr-2 text-gray-500">#</span>
+                <span>System Status:</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm font-mono">
                 <div className="flex items-center">
-                  <span className="h-2 w-2 rounded-full bg-red-500 mr-1 animate-pulse"></span>
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-500 mr-2 animate-pulse shadow-sm shadow-red-500"></span>
                   <span className="text-red-400">Firewall: Breached</span>
                 </div>
                 <div className="flex items-center">
-                  <span className="h-2 w-2 rounded-full bg-yellow-500 mr-1"></span>
+                  <span className="h-2.5 w-2.5 rounded-full bg-yellow-500 mr-2 shadow-sm shadow-yellow-500/50"></span>
                   <span className="text-yellow-400">Database: Limited</span>
                 </div>
                 <div className="flex items-center password-hint">
-                  <span className="h-2 w-2 rounded-full bg-green-500 mr-1"></span>
+                  <span className="h-2.5 w-2.5 rounded-full bg-green-500 mr-2 shadow-sm shadow-green-500/50"></span>
                   {/* Hidden span with username clue */}
                   <span className="text-green-400">
                     Kernel: Operational
@@ -359,7 +540,7 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
                   </span>
                 </div>
                 <div className="flex items-center username-hint">
-                  <span className="h-2 w-2 rounded-full bg-red-500 mr-1 animate-pulse"></span>
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-500 mr-2 animate-pulse shadow-sm shadow-red-500/50"></span>
                   {/* Hidden span with password clue */}
                   <span className="text-red-400">
                     Network: Compromised
@@ -370,39 +551,42 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
             </div>
           </div>
           
-          {/* Right column - Login Form */}
-          <div className="w-full md:w-1/2 bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="text-center mb-6">
-              <div className="w-20 h-20 mx-auto bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          {/* Right column - Login Form with enhanced style */}
+          <div className="w-full md:w-1/2 bg-gray-800/90 backdrop-filter backdrop-blur-sm rounded-lg p-8 border border-gray-700/70 shadow-2xl relative overflow-hidden">
+            {/* Animated gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/20 via-purple-900/10 to-transparent pointer-events-none"></div>
+            
+            <div className="text-center mb-8">
+              <div className="w-24 h-24 mx-auto bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mb-5 shadow-lg shadow-blue-600/20">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
               </div>
               <h2 
-                className="text-xl font-bold text-white"
+                className="text-2xl font-bold text-white mb-1"
                 // Hidden custom HTML attribute with a hint
                 data-admin-login="sysadmin:F1r3w4ll#2023"
               >
                 Emergency Access Required
               </h2>
-              <p className="text-gray-400 text-sm mt-1">Enter admin credentials to proceed</p>
+              <p className="text-gray-400 text-base mt-1">Enter admin credentials to proceed</p>
               
-              {/* Team leader status indicator */}
+              {/* Team leader status indicator - improved */}
               {isLeader ? (
-                <div className="mt-2 bg-green-800/30 text-green-400 py-1 px-2 rounded text-xs border border-green-700/50">
+                <div className="mt-3 bg-green-800/30 text-green-400 py-2 px-3 rounded-md text-sm border border-green-700/50 shadow-inner">
                   You are the team leader - your team can see what you type
                 </div>
               ) : (
-                <div className="mt-2 bg-blue-800/30 text-blue-400 py-1 px-2 rounded text-xs border border-blue-700/50">
+                <div className="mt-3 bg-blue-800/30 text-blue-400 py-2 px-3 rounded-md text-sm border border-blue-700/50 shadow-inner">
                   Viewing team leader's input - only they can submit the form
                 </div>
               )}
             </div>
             
             <form onSubmit={handleLogin}>
-              <div className="mb-4">
+              <div className="mb-5">
                 <label 
-                  className="block text-gray-400 text-sm font-medium mb-2" 
+                  className="block text-gray-300 text-sm font-medium mb-2" 
                   htmlFor="username"
                 >
                   Username
@@ -412,9 +596,9 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
                   id="username"
                   value={username}
                   onChange={(e) => handleInputChange('username', e.target.value)}
-                  className={`w-full px-3 py-2 bg-gray-700 text-white rounded-md border ${
-                    !isLeader ? 'border-blue-600/50 cursor-not-allowed' : 'border-gray-600'
-                  } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors duration-200`}
+                  className={`w-full px-4 py-3 bg-gray-700/80 text-white rounded-md border ${
+                    !isLeader ? 'border-blue-600/50 cursor-not-allowed' : 'border-gray-600/50'
+                  } focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-colors duration-200 text-base tracking-wide shadow-inner`}
                   placeholder="Enter username"
                   // Hidden placeholder text in the HTML
                   placeholder-hint="sysadmin"
@@ -425,7 +609,7 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
               
               <div className="mb-6">
                 <label 
-                  className="block text-gray-400 text-sm font-medium mb-2" 
+                  className="block text-gray-300 text-sm font-medium mb-2" 
                   htmlFor="password"
                 >
                   Password
@@ -435,9 +619,9 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
                   id="password"
                   value={password}
                   onChange={(e) => handleInputChange('password', e.target.value)}
-                  className={`w-full px-3 py-2 bg-gray-700 text-white rounded-md border ${
-                    !isLeader ? 'border-blue-600/50 cursor-not-allowed' : 'border-gray-600'
-                  } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors duration-200`}
+                  className={`w-full px-4 py-3 bg-gray-700/80 text-white rounded-md border ${
+                    !isLeader ? 'border-blue-600/50 cursor-not-allowed' : 'border-gray-600/50'
+                  } focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-colors duration-200 text-base tracking-wide shadow-inner`}
                   placeholder="Enter password"
                   // Hidden placeholder text in the HTML
                   placeholder-hint="F1r3w4ll#2023"
@@ -447,14 +631,8 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
               </div>
               
               {error && (
-                <div className="mb-4 p-2 bg-red-900/50 border border-red-700 rounded-md text-red-400 text-sm">
+                <div className="mb-5 p-3 bg-red-900/50 border border-red-700 rounded-md text-red-400 text-sm">
                   {error}
-                </div>
-              )}
-              
-              {showHint && (
-                <div className="mb-4 p-2 bg-blue-900/50 border border-blue-700 rounded-md text-blue-400 text-sm">
-                  Hint: Press F12 to open Developer Tools, then check the Elements tab for hidden clues.
                 </div>
               )}
               
@@ -464,7 +642,7 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
                   isLeader
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800'
                     : 'bg-gray-700 cursor-not-allowed'
-                } text-white font-medium py-2 px-4 rounded-md transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50`}
+                } text-white font-medium py-3 px-4 rounded-md text-base transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 shadow-lg shadow-blue-700/20`}
                 disabled={!isLeader}
               >
                 {isLeader ? 'Authenticate' : 'Team Leader Only'}
@@ -473,8 +651,8 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
           </div>
         </div>
         
-        {/* System info footer with hidden HTML comment */}
-        <div className="bg-black bg-opacity-80 text-gray-500 py-2 px-4 text-xs font-mono flex justify-between">
+        {/* System info footer with enhanced style */}
+        <div className="bg-black/90 backdrop-filter backdrop-blur-sm text-gray-500 py-2.5 px-4 text-xs font-mono flex justify-between border-t border-gray-800/80">
           <div>TOMAX OS v4.5.2</div>
           <div className="flex space-x-4">
             <div className="text-green-400">[CPU: 87%]</div>

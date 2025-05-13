@@ -21,18 +21,7 @@ const HackerChat = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   // Set of follow-up clues to reveal based on game phase and time
-  const clues = [
-    {
-      phase: 1,
-      delay: 300000, // 5 minutes after chat appears
-      text: "Did you find the welcome_admin.txt file? Try accessing it directly in your browser by adding it to the end of the URL."
-    },
-    {
-      phase: 2,
-      delay: 30000, // 30 seconds after entering phase 2
-      text: "Binary, Base64, ROT13... different layers of encoding for different layers of security. Decrypt them all to proceed."
-    }
-  ];
+  const clues = [];
 
   // Initialize with the first hacker message
   useEffect(() => {
@@ -127,36 +116,6 @@ const HackerChat = () => {
       console.error('[HACKER CHAT] Error sending hacker message:', error);
     }
   };
-
-  // Send periodic clues based on game phase
-  useEffect(() => {
-    if (!roomCode) return;
-    
-    const clueTimers = [];
-    
-    // Set up timers for clues relevant to the current phase
-    clues.forEach(clue => {
-      if (clue.phase === currentGamePhase) {
-        // Check if this clue has already been sent
-        const alreadySent = messages.some(msg => 
-          msg.sender === 'hacker' && msg.text === clue.text
-        );
-        
-        if (!alreadySent) {
-          const timer = setTimeout(() => {
-            sendHackerMessage(clue.text);
-          }, clue.delay);
-          
-          clueTimers.push(timer);
-        }
-      }
-    });
-    
-    return () => {
-      // Clean up all timers when component unmounts or phase changes
-      clueTimers.forEach(timer => clearTimeout(timer));
-    };
-  }, [roomCode, currentGamePhase, messages]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {

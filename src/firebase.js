@@ -486,13 +486,22 @@ const recordFailedLogin = async (roomCode) => {
     const chatRef = ref(database, `lobbies/${roomCode}/hackerChat`);
     await push(chatRef, {
       sender: 'hacker',
-      text: `Access denied.
+      text: `Oh, you thought this would be easy?
+A team of developers, huh?
+Adorable.
+
+Let me guess — someone's already blaming the DevOps, right?
+
+Go on, impress me…
+
 Your precious system… is no longer yours.
 But I'm not without mercy.
+
 I left you something — a gift, if you will.
-Look for the file: welcome_admin.txt.
+
 Decode it…
-and maybe, just maybe… you'll earn your way back in.`,
+and maybe, just maybe…
+you'll earn your way back in.`,
       timestamp: serverTimestamp(),
       isFirstMessage: true // Flag to indicate this is the first hacker message
     });

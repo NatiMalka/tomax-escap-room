@@ -58,6 +58,9 @@ const Lobby = () => {
   const [hackerFirstMessagePlayed, setHackerFirstMessagePlayed] = useState(false);
   const hackerFirstClueAudioRef = useRef(null);
   
+  // Add state for background music
+  const [isMusicMuted, setIsMusicMuted] = useState(false);
+  
   // One-time initialization
   useEffect(() => {
     if (!roomCode || !userId) {
@@ -492,6 +495,21 @@ const Lobby = () => {
     );
   };
 
+  // Add function to toggle background music
+  const toggleBackgroundMusic = () => {
+    if (!audioRef.current) return;
+    
+    if (isMusicMuted) {
+      audioRef.current.play().catch(err => {
+        console.error('[LOBBY] Error playing background music:', err);
+      });
+    } else {
+      audioRef.current.pause();
+    }
+    
+    setIsMusicMuted(!isMusicMuted);
+  };
+
   // Start or stop background music based on video playing state
   useEffect(() => {
     if (isVideoPlaying && audioRef.current) {
@@ -499,11 +517,23 @@ const Lobby = () => {
         console.error('[LOBBY] Error playing background music:', err);
       });
     } else if (!isVideoPlaying && audioRef.current && !audioRef.current.paused) {
-      // If video ended but we want music to continue playing throughout the game,
       // don't pause the audio here
       // audioRef.current.pause();
     }
   }, [isVideoPlaying]);
+
+  // Effect to update audio muted state
+  useEffect(() => {
+    if (!audioRef.current) return;
+    
+    if (isMusicMuted) {
+      audioRef.current.pause();
+    } else if (!isVideoPlaying) {
+      audioRef.current.play().catch(err => {
+        console.error('[LOBBY] Error playing background music:', err);
+      });
+    }
+  }, [isMusicMuted, isVideoPlaying]);
 
   // Watch for hacker chat messages to play audio when first message appears
   useEffect(() => {
@@ -1194,6 +1224,28 @@ const Lobby = () => {
       
       {/* Hacker Chat - Appears only after failed login attempt */}
       {showHackerChat && <HackerChat />}
+
+      {/* Floating music control button */}
+      <div className="fixed bottom-4 left-4 z-50">
+        <button
+          onClick={toggleBackgroundMusic}
+          className={`p-3 rounded-full transition-colors duration-200 ${
+            isMusicMuted ? 'bg-red-800 hover:bg-red-700' : 'bg-green-800 hover:bg-green-700'
+          }`}
+          title={isMusicMuted ? "Unmute background music" : "Mute background music"}
+        >
+          {isMusicMuted ? (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            </svg>
+          )}
+        </button>
+      </div>
     </div>
   );
 };
