@@ -74,10 +74,34 @@ const createLobby = async (roomCode, hostData) => {
       createdAt: Date.now(),
       gameState: "lobby",
       settings: {
-        timeLimit: 30 // in minutes
+        timeLimit: 30, // in minutes
+        penaltyThreshold: 1, // After how many attempts to apply penalty
+        penaltyAmount: 120 // Default penalty in seconds (2 minutes)
       },
       leaderVotes: {}, // Track votes for leader
-      selectedLeader: null // The final selected leader
+      selectedLeader: null, // The final selected leader
+      // Initialize timer with default values
+      timer: {
+        duration: 30 * 60, // 30 minutes in seconds
+        remainingTime: 30 * 60,
+        startTime: null,
+        isRunning: false,
+        hasStarted: false,
+        penalty: {
+          active: false,
+          amount: 0,
+          count: 0, // Track how many penalties have been applied
+          lastApplied: null
+        }
+      },
+      // Initialize game log
+      gameLog: {
+        initialized: {
+          type: 'system',
+          message: 'Game system initialized',
+          timestamp: Date.now()
+        }
+      }
     });
     
     // Add host to players list
@@ -525,10 +549,45 @@ Message:
 Not everything is visible in plain sight...  
 Sometimes, to see the truth, you need to Inspect."
 
-#404NotFound #ButLookCloser`,
+#404NotFound #ButLookCloser
+
+-----ENCRYPTED CONTENT-----
+D*(*D&D*&(DF*G(*DF*G(S)SDF&S(F*&SF)*DF(*&)F
+H*DS(FH(SD*FHSD(*FH(*SDFH(*SDFH()D
+SF)(*DSF(*JHDSF(*JHSD(*FJSD(*F
+J(*SDFJ(*SJDF*)JSDIJF)SDIJF)(*J)(*
+
+Access to full contents requires security code.
+`,
           isFile: true,
           fileName: 'welcome_admin.txt',
-          timestamp: serverTimestamp()
+          timestamp: serverTimestamp(),
+          decryptedContent: `*** SYSTEM LOG ***
+Unauthorized Access Detected  
+User: blocked_user  
+Time: 03:14 AM  
+IP: 127.0.0.1  
+TraceID: RECON-314159
+
+DECRYPTION SUCCESSFUL - ACCESS GRANTED
+
+Memo from Security Team:
+We've detected unauthorized access to the system. 
+The intruder appears to be using credentials from a former employee.
+The breach originated from the INTERNAL NETWORK.
+
+Current server state:
+- Admin access: COMPROMISED
+- Firewall: DISABLED
+- Backup systems: OFFLINE
+- User login: REDIRECTED
+
+CRITICAL: The hacker has modified the authentication system.
+Look for changed files in the codebase - something is hidden in plain sight.
+Check the dev tools for suspicious artifacts - they've left "comments" in the code.
+
+--Security Team
+`
         });
         console.log(`[FIREBASE] Hacker sent file: welcome_admin.txt`);
       } catch (error) {
@@ -538,6 +597,192 @@ Sometimes, to see the truth, you need to Inspect."
     
   } catch (error) {
     console.error("[FIREBASE] Error recording failed login:", error);
+    throw error;
+  }
+};
+
+// Initialize the game timer
+const initializeGameTimer = async (roomCode) => {
+  try {
+    console.log(`[FIREBASE] Initializing game timer for lobby: ${roomCode}`);
+    const timerRef = ref(database, `lobbies/${roomCode}/timer`);
+    
+    // Check if timer already exists
+    const snapshot = await get(timerRef);
+    if (!snapshot.exists()) {
+      // Set up timer with initial values
+      await set(timerRef, {
+        duration: 30 * 60, // 30 minutes in seconds
+        remainingTime: 30 * 60,
+        startTime: null,
+        isRunning: false,
+        hasStarted: false,
+        penalty: {
+          active: false,
+          amount: 0,
+          count: 0,
+          lastApplied: null
+        }
+      });
+      console.log(`[FIREBASE] Timer initialized for lobby: ${roomCode}`);
+    } else {
+      console.log(`[FIREBASE] Timer already exists for lobby: ${roomCode}`);
+    }
+  } catch (error) {
+    console.error("[FIREBASE] Error initializing game timer:", error);
+    throw error;
+  }
+};
+
+// Start the game timer
+const startGameTimer = async (roomCode) => {
+  try {
+    console.log(`[FIREBASE] Starting game timer for lobby: ${roomCode}`);
+    const timerRef = ref(database, `lobbies/${roomCode}/timer`);
+    
+    // Get current timer data
+    const snapshot = await get(timerRef);
+    if (snapshot.exists()) {
+      const timerData = snapshot.val();
+      
+      // Only start the timer if it hasn't been started before
+      if (!timerData.hasStarted) {
+        await update(timerRef, {
+          startTime: Date.now(),
+          isRunning: true,
+          hasStarted: true
+        });
+        console.log(`[FIREBASE] Timer started for lobby: ${roomCode}`);
+      } else {
+        console.log(`[FIREBASE] Timer already started for lobby: ${roomCode}`);
+      }
+    } else {
+      console.error(`[FIREBASE] Timer not found for lobby: ${roomCode}`);
+      throw new Error("Timer not initialized");
+    }
+  } catch (error) {
+    console.error("[FIREBASE] Error starting game timer:", error);
+    throw error;
+  }
+};
+
+// Pause the game timer
+const pauseGameTimer = async (roomCode) => {
+  try {
+    console.log(`[FIREBASE] Pausing game timer for lobby: ${roomCode}`);
+    const timerRef = ref(database, `lobbies/${roomCode}/timer`);
+    
+    // Get current timer data
+    const snapshot = await get(timerRef);
+    if (snapshot.exists()) {
+      const timerData = snapshot.val();
+      
+      if (timerData.isRunning) {
+        // Calculate remaining time
+        const currentTime = Date.now();
+        const elapsedSeconds = Math.floor((currentTime - timerData.startTime) / 1000);
+        const remainingTime = Math.max(0, timerData.duration - elapsedSeconds);
+        
+        // Fixed: Use a complete object update instead of dot notation
+        const updatedTimer = {
+          ...timerData,
+          remainingTime: remainingTime,
+          isRunning: false
+        };
+        
+        await update(timerRef, updatedTimer);
+        console.log(`[FIREBASE] Timer paused for lobby: ${roomCode}`);
+      } else {
+        console.log(`[FIREBASE] Timer already paused for lobby: ${roomCode}`);
+      }
+    } else {
+      console.error(`[FIREBASE] Timer not found for lobby: ${roomCode}`);
+      throw new Error("Timer not initialized");
+    }
+  } catch (error) {
+    console.error("[FIREBASE] Error pausing game timer:", error);
+    throw error;
+  }
+};
+
+// Apply time penalty for wrong login attempts
+const applyTimePenalty = async (roomCode, penaltySeconds = 120) => {
+  try {
+    console.log(`[FIREBASE] Applying ${penaltySeconds}s time penalty to room ${roomCode}`);
+    const timerRef = ref(database, `lobbies/${roomCode}/timer`);
+    
+    // Get current timer data
+    const snapshot = await get(timerRef);
+    if (snapshot.exists()) {
+      const timerData = snapshot.val();
+      
+      if (timerData && timerData.isRunning) {
+        // Calculate current remaining time
+        const currentTime = Date.now();
+        const elapsedSeconds = Math.floor((currentTime - timerData.startTime) / 1000);
+        const currentRemaining = Math.max(0, timerData.duration - elapsedSeconds);
+        
+        // Apply penalty (reduce time)
+        const newDuration = Math.max(0, timerData.duration - penaltySeconds);
+        
+        // Increment penalty count
+        const currentCount = (timerData.penalty && timerData.penalty.count) || 0;
+        const newCount = currentCount + 1;
+        
+        // Calculate time remaining after penalty
+        const newRemaining = Math.max(0, currentRemaining - penaltySeconds);
+        const minutesLost = Math.floor(penaltySeconds / 60);
+        const secondsLost = penaltySeconds % 60;
+        
+        // Format the penalty amount for display
+        const formattedPenalty = `${minutesLost.toString().padStart(2, '0')}:${secondsLost.toString().padStart(2, '0')}`;
+        
+        // Update Firebase with new values - fixed object structure
+        await update(timerRef, {
+          duration: newDuration,
+          penalty: {
+            active: true,
+            amount: penaltySeconds,
+            formattedAmount: formattedPenalty,
+            appliedAt: Date.now(),
+            count: newCount,
+            lastApplied: Date.now(),
+            timeRemaining: newRemaining
+          }
+        });
+        
+        console.log(`[FIREBASE] Applied ${penaltySeconds}s penalty. New duration: ${newDuration}s, Remaining: ${newRemaining}s, Total penalties: ${newCount}`);
+        
+        // Also record the penalty in the game log for all players to see
+        const logRef = ref(database, `lobbies/${roomCode}/gameLog`);
+        await push(logRef, {
+          type: 'penalty',
+          amount: penaltySeconds,
+          formattedAmount: formattedPenalty,
+          timestamp: serverTimestamp(),
+          penaltyCount: newCount,
+          timeRemaining: newRemaining,
+          message: `TIME PENALTY: -${formattedPenalty} (${newCount} ${newCount === 1 ? 'penalty' : 'penalties'} total)`
+        });
+        
+        return {
+          success: true,
+          penaltySeconds,
+          formattedPenalty,
+          newDuration,
+          newRemaining,
+          penaltyCount: newCount
+        };
+      } else {
+        console.error(`[FIREBASE] Timer not running, cannot apply penalty`);
+        return { success: false, error: 'Timer not running' };
+      }
+    } else {
+      console.error(`[FIREBASE] Timer not found, cannot apply penalty`);
+      return { success: false, error: 'Timer not found' };
+    }
+  } catch (error) {
+    console.error("[FIREBASE] Error applying time penalty:", error);
     throw error;
   }
 };
@@ -555,5 +800,9 @@ export {
   updateGamePhase,
   updateLeaderKeystrokes,
   clearLeaderKeystrokes,
-  recordFailedLogin
+  recordFailedLogin,
+  initializeGameTimer,
+  startGameTimer,
+  pauseGameTimer,
+  applyTimePenalty
 }; 

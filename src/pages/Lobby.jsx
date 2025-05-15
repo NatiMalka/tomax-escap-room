@@ -6,7 +6,8 @@ import GlitchText from '../components/GlitchText';
 import PlayerList from '../components/PlayerList';
 import GamePhases from '../components/GamePhases';
 import HackerChat from '../components/HackerChat';
-import { getLobbyData, leaveLobby, startGame, voteForLeader, clearLeaderVotes, markVideoEnded, updateGamePhase, database } from '../firebase';
+import Timer from '../components/Timer';
+import { getLobbyData, leaveLobby, startGame, voteForLeader, clearLeaderVotes, markVideoEnded, updateGamePhase, database, initializeGameTimer } from '../firebase';
 import { ref, set, get, update, onValue } from 'firebase/database';
 
 // Mock data for demonstration - initially empty
@@ -310,14 +311,15 @@ const Lobby = () => {
   };
 
   const handleStartGame = async () => {
-    if (!isHost) return;
-    
     try {
+      console.log('[LOBBY] Starting game...');
+      // Initialize the game timer
+      await initializeGameTimer(roomCode);
+      // Start the game (existing functionality)
       await startGame(roomCode);
-      // The countdown will be triggered by the database update listener
-    } catch (error) {
-      console.error("Error starting game:", error);
-      setError("Failed to start the game. Please try again.");
+    } catch (err) {
+      console.error('[LOBBY] Error starting game:', err);
+      setError('Failed to start game. Please try again.');
     }
   };
 
@@ -1246,6 +1248,9 @@ const Lobby = () => {
           )}
         </button>
       </div>
+
+      {/* Show the timer only when the game has started (gamePhase > 0) */}
+      {gamePhase > 0 && <Timer roomCode={roomCode} gamePhase={gamePhase} />}
     </div>
   );
 };

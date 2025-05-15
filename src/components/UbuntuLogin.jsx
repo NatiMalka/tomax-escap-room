@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useLocation } from 'react-router-dom';
-import { database, updateLeaderKeystrokes, clearLeaderKeystrokes, recordFailedLogin } from '../firebase';
+import { database, updateLeaderKeystrokes, clearLeaderKeystrokes, recordFailedLogin, startGameTimer, applyTimePenalty } from '../firebase';
 import { ref, get, onValue, update, push, serverTimestamp } from 'firebase/database';
 import useHackerChat from './useHackerChat';
 
@@ -22,6 +22,7 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
   const [leaderName, setLeaderName] = useState('');
   const [syncEnabled, setSyncEnabled] = useState(true);
   const [showHackerChat, setShowHackerChat] = useState(false);
+  const [isPenaltyApplied, setIsPenaltyApplied] = useState(false);
   
   // Track subscription to avoid memory leaks
   const leaderInputSubscription = useRef(null);
@@ -38,6 +39,9 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
   // The correct credentials - in a real game these would be discovered through the dev tools
   const correctUsername = 'sysadmin';
   const correctPassword = 'F1r3w4ll#2023';
+
+  // Add audio ref for error sound
+  const errorSoundRef = useRef(null);
 
   // Check if the current user is the team leader
   useEffect(() => {
@@ -178,6 +182,22 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
     };
   }, [roomCode]);
 
+  // Start the timer when the component mounts (first challenge)
+  useEffect(() => {
+    const startTimer = async () => {
+      if (!roomCode) return;
+      
+      try {
+        console.log('[UBUNTU LOGIN] Starting game timer for first challenge');
+        await startGameTimer(roomCode);
+      } catch (error) {
+        console.error('[UBUNTU LOGIN] Error starting game timer:', error);
+      }
+    };
+    
+    startTimer();
+  }, [roomCode]);
+
   // Handle input changes for the leader
   const handleInputChange = async (fieldName, value) => {
     if (fieldName === 'username') {
@@ -264,13 +284,65 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
         const newAttempts = loginAttempts + 1;
         setLoginAttempts(newAttempts);
         
+        // Play error sound
+        errorSoundRef.current?.play().catch(e => 
+          console.error("[UBUNTU LOGIN] Failed to play error sound:", e)
+        );
+        
         const errorMsg = 'Authentication failed. Invalid credentials.';
         setError(errorMsg);
         
-        const failureLines = [
-          { text: 'Authentication failed', color: 'text-red-500' },
-          { text: `${3 - loginAttempts} attempts remaining before lockout`, color: 'text-yellow-400' }
-        ];
+        // Time penalty after the first attempt
+        let failureLines = [];
+        if (newAttempts > 1) {
+          // Apply time penalty
+          try {
+            // Apply 2-minute penalty
+            const penaltyResult = await applyTimePenalty(roomCode, 120);
+            setIsPenaltyApplied(true);
+            
+            if (penaltyResult && penaltyResult.success) {
+              // Add detailed penalty warning to terminal
+              failureLines = [
+                { text: 'Authentication failed', color: 'text-red-500' },
+                { text: 'SECURITY ALERT: Unauthorized access attempt detected', color: 'text-red-500' },
+                { text: `TIME PENALTY APPLIED: -${penaltyResult.formattedPenalty}`, color: 'text-red-500' },
+                { text: `Security protocols activated (Penalty #${penaltyResult.penaltyCount})`, color: 'text-red-500' },
+                { text: `${3 - newAttempts} attempts remaining before lockout`, color: 'text-yellow-400' }
+              ];
+              
+              // Optional - Add additional hacker chat message about penalties
+              setTimeout(async () => {
+                try {
+                  if (isLeader) {
+                    await sendHackerMessage(
+                      'You think you can brute force your way in? How predictable. Every failed attempt costs you precious time... Tick tock.',
+                      'hacker',
+                      false
+                    );
+                  }
+                } catch (e) {
+                  console.error('[UBUNTU LOGIN] Error sending hacker penalty message:', e);
+                }
+              }, 3000);
+            } else {
+              throw new Error('Penalty application failed');
+            }
+          } catch (err) {
+            console.error('[UBUNTU LOGIN] Error applying time penalty:', err);
+            failureLines = [
+              { text: 'Authentication failed', color: 'text-red-500' },
+              { text: 'WARNING: Security protocols attempted to apply penalty', color: 'text-yellow-400' },
+              { text: `${3 - newAttempts} attempts remaining before lockout`, color: 'text-yellow-400' }
+            ];
+          }
+        } else {
+          failureLines = [
+            { text: 'Authentication failed', color: 'text-red-500' },
+            { text: 'WARNING: Next failed attempt will result in time penalty', color: 'text-yellow-400' },
+            { text: `${3 - newAttempts} attempts remaining before lockout`, color: 'text-yellow-400' }
+          ];
+        }
         
         setTerminalLines(prev => [...prev, ...failureLines]);
         
@@ -677,6 +749,26 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
       {showHackerChat && (
         <div id="hacker-chat-trigger" data-show-chat="true" style={{ display: 'none' }}></div>
       )}
+      
+      {/* Add error sound for failed attempts */}
+      <audio ref={errorSoundRef} src="/error-sound.mp3" preload="auto" />
+      
+      {/* Penalty alarm animation */}
+      <AnimatePresence>
+        {isPenaltyApplied && (
+          <motion.div 
+            className="fixed inset-0 bg-red-500/20 z-30 pointer-events-none"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.2, 0] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.5 }}
+            onAnimationComplete={() => {
+              setIsPenaltyApplied(false);
+              console.log('[UBUNTU LOGIN] Penalty animation completed, resetting flag');
+            }}
+          />
+        )}
+      </AnimatePresence>
       
       {/* CSS for terminal scrollbar */}
       <style jsx>{`

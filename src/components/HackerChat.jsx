@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { database } from '../firebase';
 import { ref, push, onValue, serverTimestamp, get } from 'firebase/database';
 import { useParams } from 'react-router-dom';
+import KeypadLock from './KeypadLock';
 
 const HackerChat = () => {
   const { roomCode } = useParams();
@@ -14,6 +15,9 @@ const HackerChat = () => {
   const [currentGamePhase, setCurrentGamePhase] = useState(1);
   const [isFirstRender, setIsFirstRender] = useState(true);
   const [openFile, setOpenFile] = useState(null);
+  const [showKeypadLock, setShowKeypadLock] = useState(false);
+  const [fileContentUnlocked, setFileContentUnlocked] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
   
   // Sound effect references
   const messageAudioRef = useRef(null);
@@ -69,9 +73,19 @@ const HackerChat = () => {
       }
     });
     
+    // Set up listener for keypad unlocked state
+    const keypadRef = ref(database, `lobbies/${roomCode}/keypadState`);
+    const keypadUnsubscribe = onValue(keypadRef, (snapshot) => {
+      const keypadState = snapshot.val();
+      if (keypadState && keypadState.unlocked) {
+        setFileContentUnlocked(true);
+      }
+    });
+    
     return () => {
       unsubscribe();
       phaseUnsubscribe();
+      keypadUnsubscribe();
     };
   }, [roomCode, messages.length, isExpanded, isFirstRender, soundEnabled]);
 
@@ -140,12 +154,44 @@ const HackerChat = () => {
 
   // Open file content in a modal
   const handleFileClick = (message) => {
-    setOpenFile(message);
+    // Check if it's the welcome_admin.txt file which requires the keypad
+    if (message.fileName === 'welcome_admin.txt' && !fileContentUnlocked) {
+      setShowKeypadLock(true);
+      setPendingFile(message);
+    } else {
+      // For other files or if the keypad is already unlocked
+      setOpenFile(message);
+    }
   };
 
   // Close the file modal
   const closeFileModal = () => {
     setOpenFile(null);
+  };
+
+  // Handle keypad unlock success
+  const handleKeypadUnlock = () => {
+    setFileContentUnlocked(true);
+    
+    // Show the file content after a brief delay
+    setTimeout(() => {
+      if (pendingFile) {
+        setOpenFile(pendingFile);
+        setShowKeypadLock(false);
+        setPendingFile(null);
+      }
+    }, 1000);
+  };
+
+  // Close the keypad modal without opening file
+  const closeKeypadModal = () => {
+    setShowKeypadLock(false);
+    setPendingFile(null);
+    
+    // If already unlocked, open the file directly
+    if (fileContentUnlocked && pendingFile) {
+      setOpenFile(pendingFile);
+    }
   };
 
   return (
@@ -270,6 +316,11 @@ const HackerChat = () => {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                             <span className="text-red-300 underline">{message.fileName}</span>
+                            {message.fileName === 'welcome_admin.txt' && !fileContentUnlocked && (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                              </svg>
+                            )}
                           </div>
                         ) : (
                           <pre className="whitespace-pre-wrap font-mono inline-block">
@@ -331,6 +382,17 @@ const HackerChat = () => {
         `}</style>
       </motion.div>
 
+      {/* Keypad Lock Modal */}
+      <AnimatePresence>
+        {showKeypadLock && (
+          <KeypadLock 
+            onUnlock={handleKeypadUnlock}
+            onClose={closeKeypadModal}
+            fileName={pendingFile?.fileName || "welcome_admin.txt"}
+          />
+        )}
+      </AnimatePresence>
+
       {/* File Modal */}
       <AnimatePresence>
         {openFile && (
@@ -373,7 +435,9 @@ const HackerChat = () => {
                   <div className="text-xs text-red-400">{new Date().toLocaleString()}</div>
                 </div>
                 <pre className="whitespace-pre-wrap bg-black/50 p-4 rounded border border-red-500/30 text-sm">
-                  {openFile.text.replace(`[File: ${openFile.fileName}]`, '')}
+                  {openFile.fileName === 'welcome_admin.txt' && fileContentUnlocked && openFile.decryptedContent
+                    ? openFile.decryptedContent
+                    : openFile.text.replace(`[File: ${openFile.fileName}]`, '')}
                 </pre>
               </div>
             </motion.div>
