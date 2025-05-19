@@ -30,7 +30,7 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
   
   const [terminalLines, setTerminalLines] = useState([
     { text: 'System booting...', color: 'text-green-400' },
-    { text: 'TOMAX Security System v3.7.1', color: 'text-blue-400' },
+    { text: 'TOMA-ESCAPE Security System v3.7.1', color: 'text-blue-400' },
     { text: 'Initializing security protocols...', color: 'text-green-400' },
     { text: 'WARNING: Unauthorized access detected', color: 'text-red-500' },
     { text: 'Emergency login required', color: 'text-yellow-400' },
@@ -264,7 +264,7 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
         const successLines = [
           { text: 'Authentication successful', color: 'text-green-400' },
           { text: 'Bypassing security protocols...', color: 'text-green-400' },
-          { text: 'Access granted to TOMAX mainframe', color: 'text-green-500' }
+          { text: 'Access granted to TOMA-ESCAPE mainframe', color: 'text-green-500' }
         ];
         
         setTerminalLines(prev => [...prev, ...successLines]);
@@ -547,7 +547,7 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
             className="flex-grow text-center text-white font-medium username-sysadmin text-lg tracking-wider" 
             aria-description="Default admin account: sysadmin"
           >
-            TOMAX Security Gateway
+            TOMA-ESCAPE Security Gateway
           </div>
         </div>
         
@@ -725,12 +725,12 @@ const UbuntuLogin = ({ onLoginSuccess }) => {
         
         {/* System info footer with enhanced style */}
         <div className="bg-black/90 backdrop-filter backdrop-blur-sm text-gray-500 py-2.5 px-4 text-xs font-mono flex justify-between border-t border-gray-800/80">
-          <div>TOMAX OS v4.5.2</div>
+          <div>TOMA-ESCAPE OS v4.5.2</div>
           <div className="flex space-x-4">
             <div className="text-green-400">[CPU: 87%]</div>
             <div className="text-yellow-400">[MEM: 1.2GB/4GB]</div>
             <div>
-              <span className="text-blue-400 mr-1">root@tomax:</span>
+              <span className="text-blue-400 mr-1">root@toma-escape:</span>
               <span className="text-purple-400">~#</span>
               {/* Hiding credentials in source code */}
               {/* <!--

@@ -640,7 +640,7 @@ const Lobby = () => {
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-center mb-8 pb-4">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <h1 className="text-3xl font-bold text-white bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">TOMAX: Digital Breach</h1>
+            <h1 className="text-3xl font-bold text-white bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">TOMA-ESCAPE</h1>
           </motion.div>
           
           <motion.div 
@@ -702,7 +702,7 @@ const Lobby = () => {
                 Mission Brief
               </h2>
               <p className="text-gray-300 mb-4">
-                A hacker has breached TOMAX systems and planted a digital bomb. Your team must work together to:
+                A hacker has breached TOMA-ESCAPE systems and planted a digital bomb. Your team must work together to:
               </p>
               <ul className="space-y-3">
                 <li className="flex items-start">

@@ -544,21 +544,20 @@ Time: 03:14 AM
 IP: 127.0.0.1  
 TraceID: RECON-314159
 
-Message:  
-"He's hidden the key where configs hide.  
-Not everything is visible in plain sight...  
-Sometimes, to see the truth, you need to Inspect."
+DECRYPTION SUCCESSFUL - ACCESS GRANTED
 
-#404NotFound #ButLookCloser
-
------ENCRYPTED CONTENT-----
-D*(*D&D*&(DF*G(*DF*G(S)SDF&S(F*&SF)*DF(*&)F
-H*DS(FH(SD*FHSD(*FH(*SDFH(*SDFH()D
-SF)(*DSF(*JHDSF(*JHSD(*FJSD(*F
-J(*SDFJ(*SJDF*)JSDIJF)SDIJF)(*J)(*
-
-Access to full contents requires security code.
-`,
+-- Begin anomaly data --
+KioqIFNZU1RFTSBMT0cgKioqClVuYXV0aG9yaXplZCBB
+Y2Nlc3MgRGV0ZWN0ZWQgIApVc2VyOiBibG9ja2VkX3Vz
+ZXIgIApUaW1lOiAwMzoxNCBBTSAgCklQOiAxMjcuMC4w
+LjEgIApUcmFjZUlEOiBSRUNPTi0zMTQxNTkKCk1lc3Nh
+Z2U6ICAKIkhlJ3MgaGlkZGVuIHRoZSBrZXkgd2hlcmUg
+Y29uZmlncyBoaWRlLiAgCk5vdCBldmVyeXRoaW5nIGlz
+IHZpc2libGUgaW4gcGxhaW4gc2lnaHQuLi4gIApTb21l
+dGltZXMsIHRvIHNlZSB0aGUgdHJ1dGgsIHlvdSBuZWVk
+IHRvIEluc3BlY3QuIgoKIzQwNE5vdEZvdW5kICNCdXRM
+b29rQ2xvc2VyIA==
+-- End anomaly data --`,
           isFile: true,
           fileName: 'welcome_admin.txt',
           timestamp: serverTimestamp(),
@@ -571,23 +570,18 @@ TraceID: RECON-314159
 
 DECRYPTION SUCCESSFUL - ACCESS GRANTED
 
-Memo from Security Team:
-We've detected unauthorized access to the system. 
-The intruder appears to be using credentials from a former employee.
-The breach originated from the INTERNAL NETWORK.
-
-Current server state:
-- Admin access: COMPROMISED
-- Firewall: DISABLED
-- Backup systems: OFFLINE
-- User login: REDIRECTED
-
-CRITICAL: The hacker has modified the authentication system.
-Look for changed files in the codebase - something is hidden in plain sight.
-Check the dev tools for suspicious artifacts - they've left "comments" in the code.
-
---Security Team
-`
+-- Begin anomaly data --
+KioqIFNZU1RFTSBMT0cgKioqClVuYXV0aG9yaXplZCBB
+Y2Nlc3MgRGV0ZWN0ZWQgIApVc2VyOiBibG9ja2VkX3Vz
+ZXIgIApUaW1lOiAwMzoxNCBBTSAgCklQOiAxMjcuMC4w
+LjEgIApUcmFjZUlEOiBSRUNPTi0zMTQxNTkKCk1lc3Nh
+Z2U6ICAKIkhlJ3MgaGlkZGVuIHRoZSBrZXkgd2hlcmUg
+Y29uZmlncyBoaWRlLiAgCk5vdCBldmVyeXRoaW5nIGlz
+IHZpc2libGUgaW4gcGxhaW4gc2lnaHQuLi4gIApTb21l
+dGltZXMsIHRvIHNlZSB0aGUgdHJ1dGgsIHlvdSBuZWVk
+IHRvIEluc3BlY3QuIgoKIzQwNE5vdEZvdW5kICNCdXRM
+b29rQ2xvc2VyIA==
+-- End anomaly data --`
         });
         console.log(`[FIREBASE] Hacker sent file: welcome_admin.txt`);
       } catch (error) {

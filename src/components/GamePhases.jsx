@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import UbuntuLogin from './UbuntuLogin';
+import SystemDesktop from './SystemDesktop';
 
 // Game phases:
 // 0: Video intro
 // 1: Login screen puzzle
-// 2: TBD - Next puzzles will be added here
+// 2: System Desktop with folder structure
 // 3: TBD - Final puzzles
 
 const GamePhases = ({ currentPhase, onPhaseComplete }) => {
@@ -43,22 +44,12 @@ const GamePhases = ({ currentPhase, onPhaseComplete }) => {
         );
       
       case 2:
-        // Placeholder for the next phase
+        // System Desktop with File Explorer
         return (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-30">
-            <div className="text-white text-2xl max-w-3xl w-full mx-auto bg-gray-900/90 p-8 rounded-xl shadow-2xl border border-blue-500/30">
-              <h2 className="text-3xl font-bold mb-4 text-blue-400">Phase 2: System Decryption</h2>
-              <p className="mb-4">You need to decode the encrypted messages in the welcome_admin.txt file to proceed.</p>
-              <div className="bg-black/80 p-4 rounded-lg font-mono text-sm text-green-400">
-                <p>The file contains multiple layers of encryption:</p>
-                <ul className="list-disc pl-6 mt-2 space-y-1">
-                  <li>Binary code</li>
-                  <li>Base64 encoding</li>
-                  <li>ROT13 cipher</li>
-                </ul>
-                <p className="mt-4">Find and decrypt the file to receive the next instructions.</p>
-              </div>
-            </div>
+          <div className="relative z-30">
+            <SystemDesktop 
+              onMissionComplete={() => handlePhaseComplete(2)}
+            />
           </div>
         );
       

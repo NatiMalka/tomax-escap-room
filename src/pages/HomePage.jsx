@@ -312,14 +312,21 @@ const HomePage = () => {
 
   return (
     <div className="relative min-h-screen w-full bg-gray-900 flex flex-col justify-center items-center overflow-hidden">
-      {/* Background image */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
-        style={{ backgroundImage: 'url(/images/image-homepage.jpg)' }}
-      />
+      {/* Video background */}
+      <div className="absolute inset-0 z-0 bg-gray-900">
+        <video
+          className="absolute inset-0 w-full h-full object-cover"
+          autoPlay
+          loop
+          muted
+          playsInline
+        >
+          <source src="/images/hacker-data-breach.1920x1080.mp4" type="video/mp4" />
+        </video>
+      </div>
       
       {/* Darkening overlay */}
-      <div className="absolute inset-0 bg-black/50 z-5" />
+      <div className="absolute inset-0 bg-black/60 z-5"></div>
       
       {/* Matrix-style code rain */}
       <CodeRain />
@@ -352,7 +359,7 @@ const HomePage = () => {
           className="mb-8"
         >
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-white mb-2">
-            TOMAX: Digital Breach
+            TOMA-ESCAPE
           </h1>
           
           <motion.div
@@ -376,7 +383,7 @@ const HomePage = () => {
           animate={{ opacity: 0.7 }}
           transition={{ delay: 1.5, duration: 1 }}
         >
-          A hacker has breached TOMAX systems. Your team must work together to save the data.
+          A hacker has breached TOMA-ESCAPE systems. Your team must work together to save the data.
         </motion.p>
       </div>
     </div>
