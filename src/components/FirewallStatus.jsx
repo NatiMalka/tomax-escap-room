@@ -10,21 +10,7 @@ const FirewallStatus = ({ isLeader, roomCode, onClose }) => {
   const [typingUser, setTypingUser] = useState(null);
   const inputRef = useRef(null);
   
-  const correctCode = 'ISGNORSAET';
-  
-  const scrambledEmployees = [
-    { scrambled: 'NOR', original: 'RON', firstLetter: 'R' },
-    { scrambled: 'ETLNNEA', original: 'NETANEL', firstLetter: 'N' },
-    { scrambled: 'SINHA', original: 'SHANI', firstLetter: 'S' },
-    { scrambled: 'IGRO', original: 'IGOR', firstLetter: 'I' },
-    { scrambled: 'ATL', original: 'TAL', firstLetter: 'T' },
-    { scrambled: 'YUG', original: 'GUY', firstLetter: 'G' },
-    { scrambled: 'HARSHA', original: 'SHAHAR', firstLetter: 'S' },
-    { scrambled: 'NEDE', original: 'EDEN', firstLetter: 'E' },
-    { scrambled: 'EOMR', original: 'OMER', firstLetter: 'O' },
-    { scrambled: 'ORD', original: 'DOR', firstLetter: 'D' },
-    { scrambled: 'NALO', original: 'ALON', firstLetter: 'A' }
-  ];
+  const correctCode = '876';
   
   // Position state with initial centered position
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -73,9 +59,9 @@ const FirewallStatus = ({ isLeader, roomCode, onClose }) => {
     const userId = new URLSearchParams(window.location.search).get('uid');
     const userName = new URLSearchParams(window.location.search).get('name') || 'Leader';
     
-    // Only allow uppercase letters
-    if (/^[A-Z]$/.test(e.key.toUpperCase())) {
-      const newCode = inputCode + e.key.toUpperCase();
+    // Only allow numbers for the safe code
+    if (/^[0-9]$/.test(e.key)) {
+      const newCode = inputCode + e.key;
       
       // Update code in firebase
       update(ref(database, `lobbies/${roomCode}/firewallState`), {
@@ -129,7 +115,7 @@ const FirewallStatus = ({ isLeader, roomCode, onClose }) => {
   };
   
   // Calculate firewall status percentage for progress display
-  const firewallStatusPercentage = firewallActive ? 100 : Math.min(Math.max(inputCode.length * 10, 0), 90);
+  const firewallStatusPercentage = firewallActive ? 100 : Math.min(Math.max(inputCode.length * 33, 0), 90);
   
   return (
     <motion.div 
@@ -285,7 +271,7 @@ const FirewallStatus = ({ isLeader, roomCode, onClose }) => {
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  {showSolution ? 'Hide Database Records' : 'View Database Records'}
+                  {showSolution ? 'Hide Safe Instructions' : 'View Safe Instructions'}
                 </button>
                 
                 {isLeader && (
@@ -298,51 +284,88 @@ const FirewallStatus = ({ isLeader, roomCode, onClose }) => {
             
             {showSolution && (
               <div className="bg-slate-900 bg-opacity-80 rounded-lg p-3 border border-slate-700 backdrop-blur-sm">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-sm font-semibold text-blue-300">EMPLOYEE DATABASE RECORDS</h3>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-bold text-orange-400">Crack the safe</h3>
                   <div className="text-xs px-2 py-0.5 bg-blue-900 bg-opacity-40 rounded text-blue-300">
-                    READ ONLY
+                    SECURITY VAULT
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-2">
-                  {scrambledEmployees.slice(0, 6).map((emp, index) => (
-                    <div key={index} className="bg-slate-800 bg-opacity-50 p-1.5 rounded text-xs flex items-center gap-1.5">
-                      <div className="h-4 w-4 rounded-full bg-slate-700 flex items-center justify-center text-[10px]">
-                        {index + 1}
-                      </div>
-                      <div className="font-mono">
-                        <span className="text-slate-400">{emp.scrambled}</span>
-                        <span className="text-slate-500 mx-1">→</span>
-                        <span className="text-blue-200">
-                          <span className="text-red-400 font-bold">{emp.firstLetter}</span>
-                          {emp.original.slice(1)}
-                        </span>
-                      </div>
+                <p className="text-orange-300 font-medium mb-4">
+                  Help! The safe is locked and nobody knows the code. We only know the following:
+                </p>
+                
+                <div className="space-y-3 mb-4">
+                  {/* Row 1 */}
+                  <div className="flex items-center">
+                    <div className="flex">
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">1</div>
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">2</div>
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">3</div>
                     </div>
-                  ))}
+                    <div className="ml-4 text-purple-300 text-lg font-medium">No number correct</div>
+                  </div>
+                  
+                  {/* Row 2 */}
+                  <div className="flex items-center">
+                    <div className="flex">
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">4</div>
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">5</div>
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">6</div>
+                    </div>
+                    <div className="ml-4 text-purple-300 text-lg font-medium">1 digit correct and in the right place</div>
+                  </div>
+                  
+                  {/* Row 3 */}
+                  <div className="flex items-center">
+                    <div className="flex">
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">6</div>
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">1</div>
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">2</div>
+                    </div>
+                    <div className="ml-4 text-purple-300 text-lg font-medium">1 digit correct, but not in the right place</div>
+                  </div>
+                  
+                  {/* Row 4 */}
+                  <div className="flex items-center">
+                    <div className="flex">
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">5</div>
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">4</div>
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">7</div>
+                    </div>
+                    <div className="ml-4 text-purple-300 text-lg font-medium">1 digit correct, but not in the right place</div>
+                  </div>
+                  
+                  {/* Row 5 */}
+                  <div className="flex items-center">
+                    <div className="flex">
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">8</div>
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">4</div>
+                      <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg">9</div>
+                    </div>
+                    <div className="ml-4 text-purple-300 text-lg font-medium">1 digit correct and in the right place</div>
+                  </div>
                 </div>
                 
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {scrambledEmployees.slice(6).map((emp, index) => (
-                    <div key={index + 6} className="bg-slate-800 bg-opacity-50 p-1.5 rounded text-xs flex items-center gap-1.5">
-                      <div className="h-4 w-4 rounded-full bg-slate-700 flex items-center justify-center text-[10px]">
-                        {index + 7}
-                      </div>
-                      <div className="font-mono">
-                        <span className="text-slate-400">{emp.scrambled}</span>
-                        <span className="text-slate-500 mx-1">→</span>
-                        <span className="text-blue-200">
-                          <span className="text-red-400 font-bold">{emp.firstLetter}</span>
-                          {emp.original.slice(1)}
-                        </span>
+                {/* Safe illustration */}
+                <div className="mt-4 flex justify-center">
+                  <div className="w-36 h-36 bg-gray-200 rounded-md relative p-4 flex items-center justify-center">
+                    <div className="w-20 h-20 rounded-full bg-gray-300 border-8 border-gray-400 flex items-center justify-center">
+                      <div className="w-12 h-12 rounded-full bg-gray-500 flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-full bg-gray-600"></div>
                       </div>
                     </div>
-                  ))}
+                    {/* Safe handle */}
+                    <div className="absolute right-3 top-1/2 -mt-3 w-6 h-6 bg-gray-600 rounded-full"></div>
+                  </div>
                 </div>
                 
-                <div className="text-xs text-blue-300 bg-blue-900 bg-opacity-20 p-1.5 rounded mt-2">
-                  <p>CODE FORMAT: First letters by employee seniority (oldest to newest)</p>
+                <div className="mt-4 text-center">
+                  <div className="flex justify-center">
+                    <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg text-orange-300">?</div>
+                    <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg text-orange-300">?</div>
+                    <div className="w-10 h-10 border border-orange-400 flex items-center justify-center font-bold text-lg text-orange-300">?</div>
+                  </div>
                 </div>
               </div>
             )}
