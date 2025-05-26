@@ -17,6 +17,7 @@ const SystemDesktop = ({ onMissionComplete }) => {
   const [firewallActive, setFirewallActive] = useState(false);
   const [audioPlayed, setAudioPlayed] = useState(false);
   const [hackerMessageSent, setHackerMessageSent] = useState(false);
+  const [useServerBackground, setUseServerBackground] = useState(false);
   const audioRef = useRef(null);
   const videoRef = useRef(null);
   
@@ -200,6 +201,7 @@ const SystemDesktop = ({ onMissionComplete }) => {
       if (state) {
         setShowFileExplorer(!!state.fileExplorerOpen);
         setShowFirewall(!!state.firewallWindowOpen);
+        setUseServerBackground(!!state.useServerBackground);
       }
     });
     
@@ -287,20 +289,60 @@ const SystemDesktop = ({ onMissionComplete }) => {
 
         {/* Desktop area with video wallpaper */}
         <div className="flex-1 flex flex-col overflow-hidden relative">
-          {/* Video background */}
+          {/* Background */}
           <div className="absolute inset-0 z-0">
-            <video 
-              ref={videoRef}
-              className="absolute inset-0 w-full h-full object-cover"
-              autoPlay
-              loop
-              muted
-              playsInline
-            >
-              <source src="/images/anonymous-mask.1920x1080.mp4" type="video/mp4" />
-            </video>
-            {/* Dark overlay to ensure content visibility */}
-            <div className="absolute inset-0 bg-black/40"></div>
+            {useServerBackground ? (
+              /* Server room background */
+              <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+                {/* Server rack pattern */}
+                <div className="absolute inset-0 opacity-20">
+                  <div className="grid grid-cols-8 grid-rows-6 h-full w-full gap-2 p-4">
+                    {Array.from({ length: 48 }).map((_, i) => (
+                      <div key={i} className="bg-blue-500/30 rounded-sm border border-blue-400/20 relative">
+                        <div className="absolute top-1 left-1 w-1 h-1 bg-green-400 rounded-full animate-pulse"></div>
+                        <div className="absolute top-1 right-1 w-1 h-1 bg-blue-400 rounded-full"></div>
+                        <div className="absolute bottom-1 left-1 w-1 h-1 bg-yellow-400 rounded-full"></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Animated data streams */}
+                <div className="absolute inset-0 overflow-hidden">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="absolute h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent"
+                      style={{
+                        top: `${20 + i * 15}%`,
+                        left: '-100%',
+                        width: '200%',
+                        animation: `dataStream ${3 + i * 0.5}s linear infinite`
+                      }}
+                    />
+                  ))}
+                </div>
+                
+                {/* Dark overlay to ensure content visibility */}
+                <div className="absolute inset-0 bg-black/30"></div>
+              </div>
+            ) : (
+              /* Original video background */
+              <>
+                <video 
+                  ref={videoRef}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                >
+                  <source src="/images/anonymous-mask.1920x1080.mp4" type="video/mp4" />
+                </video>
+                {/* Dark overlay to ensure content visibility */}
+                <div className="absolute inset-0 bg-black/40"></div>
+              </>
+            )}
           </div>
           
           {/* Desktop Icons */}
@@ -429,11 +471,16 @@ const SystemDesktop = ({ onMissionComplete }) => {
       {/* Hacker Chat */}
       <HackerChat />
       
-      {/* Custom animation for the scanning effect */}
+      {/* Custom animations */}
       <style jsx>{`
         @keyframes scan {
           0% { transform: translateX(0); }
           100% { transform: translateX(calc(100% + 5rem)); }
+        }
+        
+        @keyframes dataStream {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
         }
       `}</style>
     </motion.div>
