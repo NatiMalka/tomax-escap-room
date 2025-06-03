@@ -434,11 +434,27 @@ const HackerChat = () => {
                   <div className="text-xs text-red-400">// HACKER SECURED FILE //</div>
                   <div className="text-xs text-red-400">{new Date().toLocaleString()}</div>
                 </div>
-                <pre className="whitespace-pre-wrap bg-black/50 p-4 rounded border border-red-500/30 text-sm">
-                  {openFile.fileName === 'welcome_admin.txt' && fileContentUnlocked && openFile.decryptedContent
-                    ? openFile.decryptedContent
-                    : openFile.text.replace(`[File: ${openFile.fileName}]`, '')}
-                </pre>
+                
+                {/* Check if file is an image */}
+                {openFile.fileName && (openFile.fileName.endsWith('.jpeg') || openFile.fileName.endsWith('.jpg') || openFile.fileName.endsWith('.png') || openFile.fileName.endsWith('.gif')) ? (
+                  <div className="bg-black/50 p-4 rounded border border-red-500/30 flex items-center justify-center">
+                    <img 
+                      src={`/images/${openFile.fileName}`}
+                      alt={openFile.fileName}
+                      className="max-w-full max-h-96 object-contain rounded"
+                      onError={(e) => {
+                        console.error('Failed to load image:', openFile.fileName);
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <pre className="whitespace-pre-wrap bg-black/50 p-4 rounded border border-red-500/30 text-sm">
+                    {openFile.fileName === 'welcome_admin.txt' && fileContentUnlocked && openFile.decryptedContent
+                      ? openFile.decryptedContent
+                      : openFile.text.replace(`[File: ${openFile.fileName}]`, '')}
+                  </pre>
+                )}
               </div>
             </motion.div>
           </motion.div>

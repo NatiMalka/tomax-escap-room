@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ref, onValue, update } from 'firebase/database';
+import { ref, onValue, update, push, serverTimestamp } from 'firebase/database';
 import { database, applyTimePenalty } from '../firebase';
 
 const FirewallStatus = ({ isLeader, roomCode, onClose }) => {
@@ -23,8 +23,12 @@ const FirewallStatus = ({ isLeader, roomCode, onClose }) => {
   const [systemReady, setSystemReady] = useState(false);
   const [systemRebooted, setSystemRebooted] = useState(false);
   
+  // State for tracking after-reboot message
+  const [afterRebootMessageSent, setAfterRebootMessageSent] = useState(false);
+  
   const inputRef = useRef(null);
   const errorSoundRef = useRef(null);
+  const afterRebootAudioRef = useRef(null);
   
   const correctCode = '876';
   
@@ -133,6 +137,112 @@ const FirewallStatus = ({ isLeader, roomCode, onClose }) => {
       });
     }
   }, [systemRebooted, firewallActive]);
+  
+  // Handle after-reboot sound and hacker message
+  useEffect(() => {
+    if (!roomCode || !systemRebooted || afterRebootMessageSent) return;
+    
+    const afterRebootStatusRef = ref(database, `lobbies/${roomCode}/afterRebootMessage`);
+    
+    // Use a one-time check instead of a persistent listener
+    const checkAfterRebootStatus = async () => {
+      try {
+        // One-time read to check if message has already been sent
+        const snapshot = await new Promise((resolve) => {
+          onValue(afterRebootStatusRef, resolve, { once: true });
+        });
+        
+        const messageStatus = snapshot.val();
+        
+        // If message was already sent, just mark locally as sent and don't play audio again
+        if (messageStatus?.sent) {
+          setAfterRebootMessageSent(true);
+          return;
+        }
+        
+        // If leader and message not sent yet, trigger audio and message for all
+        if (isLeader && !messageStatus?.sent) {
+          // Mark message as sent in Firebase first
+          await update(ref(database, `lobbies/${roomCode}`), {
+            afterRebootMessage: {
+              sent: true,
+              timestamp: Date.now()
+            }
+          });
+          
+          // Play the after-reboot audio
+          if (afterRebootAudioRef.current) {
+            afterRebootAudioRef.current.volume = 0.6;
+            afterRebootAudioRef.current.play()
+              .then(() => {
+                console.log("After-reboot audio played");
+              })
+              .catch(err => {
+                console.error("Error playing after-reboot audio:", err);
+              });
+          }
+          
+          // Send the hacker message with a delay for dramatic effect
+          setTimeout(async () => {
+            try {
+              const chatRef = ref(database, `lobbies/${roomCode}/hackerChat`);
+              await push(chatRef, {
+                sender: 'hacker',
+                text: `Oh wow…
+You actually got the firewall running.
+Took you long enough.
+
+But while you were busy high-fiving and Googling basic configs…
+I locked down the root folder.
+
+You're welcome.
+
+Now you're even more screwed than before.
+
+Don't worry — I left you another "hint."
+It's in the image I just sent.
+
+Try not to drool on your keyboards while staring at it.
+
+Let's see if the brain trust can figure this one out.
+
+Tick tock, script kiddies.`,
+                timestamp: serverTimestamp()
+              });
+              
+              console.log('[HACKER CHAT] Sent after-reboot taunting message');
+              
+              // Send the image file 6 seconds after the text message
+              setTimeout(async () => {
+                try {
+                  await push(chatRef, {
+                    sender: 'hacker',
+                    text: '[File: wall-riddle.jpeg]',
+                    isFile: true,
+                    fileName: 'wall-riddle.jpeg',
+                    timestamp: serverTimestamp()
+                  });
+                  
+                  console.log('[HACKER CHAT] Sent wall-riddle.jpeg image');
+                } catch (error) {
+                  console.error('[HACKER CHAT] Error sending wall-riddle image:', error);
+                }
+              }, 6000); // Wait 6 seconds after text message
+              
+            } catch (error) {
+              console.error('[HACKER CHAT] Error sending after-reboot message:', error);
+            }
+          }, 3000); // Wait 3 seconds after audio starts
+          
+          setAfterRebootMessageSent(true);
+        }
+      } catch (error) {
+        console.error('[HACKER CHAT] Error checking after-reboot status:', error);
+      }
+    };
+    
+    checkAfterRebootStatus();
+  }, [roomCode, isLeader, systemRebooted, afterRebootMessageSent]);
   
   const updateFirewallState = (updates) => {
     if (roomCode) {
@@ -397,6 +507,11 @@ const FirewallStatus = ({ isLeader, roomCode, onClose }) => {
       {/* Error sound effect */}
       <audio ref={errorSoundRef} preload="auto">
         <source src="/hacker-clue/error.wav" type="audio/wav" />
+      </audio>
+      
+      {/* After-reboot sound effect */}
+      <audio ref={afterRebootAudioRef} preload="auto">
+        <source src="/affter-reboot.wav" type="audio/wav" />
       </audio>
       
       <motion.div 
